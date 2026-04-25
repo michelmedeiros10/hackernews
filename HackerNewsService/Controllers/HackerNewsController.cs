@@ -1,22 +1,22 @@
 using HackerNewsService.Models;
+using HackerNewsService.Service;
 using Microsoft.AspNetCore.Mvc;
+using System.Threading.Tasks;
 
 namespace HackerNewsService.Controllers
 {
     [ApiController]
     [Route("v1/hackernews")]
-    public class HackerNewsController : ControllerBase
+    public class HackerNewsController (
+        IStoriesService storiesService, 
+        ILogger<HackerNewsController> logger) 
+        : ControllerBase
     {
-        private readonly ILogger<HackerNewsController> _logger;
-
-        public HackerNewsController(ILogger<HackerNewsController> logger)
-        {
-            _logger = logger;
-        }
-
         [HttpGet("beststories")]
-        public IEnumerable<StoryModel> Get([FromQuery] string? nBest = "")
+        public async Task<IEnumerable<StoryModel>> Get([FromQuery] string? nBest = "")
         {
+            var bestStories = await storiesService.GetBestStories();
+
             int.TryParse(nBest ?? "", out int rank);
 
             if (rank == 0) rank = 5; //default rank
@@ -32,7 +32,7 @@ namespace HackerNewsService.Controllers
                     time = DateTime.UtcNow.Ticks
                 });
             }
-            return storyRank.OrderBy(s => s.score).ToList();
+            return storyRank.OrderByDescending(s => s.score).ToList();
         }
     }
 }
