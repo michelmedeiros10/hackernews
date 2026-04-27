@@ -15,24 +15,15 @@ namespace HackerNewsService.Controllers
         [HttpGet("beststories")]
         public async Task<IEnumerable<StoryModel>> Get([FromQuery] string? nBest = "")
         {
-            var bestStories = await storiesService.GetBestStories();
-
             int.TryParse(nBest ?? "", out int rank);
+            if (rank <= 0) rank = 3; //default rank is best 3
 
-            if (rank == 0) rank = 5; //default rank
-            List<StoryModel> storyRank = [];
-            for (int i = 1; i <= rank; i++)
-            {
-                storyRank.Add(new StoryModel 
-                {
-                    by = $"Author{i}",
-                    id = i,
-                    title = $"Title{i}",
-                    score = i * Random.Shared.Next(10,15),
-                    time = DateTime.UtcNow.Ticks
-                });
-            }
-            return storyRank.OrderByDescending(s => s.score).ToList();
+            //Setting the cache lifetime in seconds (default is 300 seconds or 5 minutes)
+            storiesService.SetCacheLifetime(30);
+
+			var bestStories = await storiesService.GetBestStories(rank);
+
+            return bestStories;
         }
     }
 }
