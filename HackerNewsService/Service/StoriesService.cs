@@ -10,14 +10,13 @@ public class StoriesService (
 	ICache cache) 
 	: IStoriesService
 {
+	private static SemaphoreSlim _semaphore = new SemaphoreSlim(5);
 	public async Task<List<int>> GetBestStoriesIds()
 	{
-		var bestStories = cache.GetBestStoriesIds();
+		var bestStories = new List<int>();
 
-		if (bestStories.Count > 0)
-		{
-			return bestStories;
-		}
+		// Limit simultaneous requests
+		await _semaphore.WaitAsync();
 
 		try
 		{
@@ -30,17 +29,41 @@ public class StoriesService (
 			bestStories = cache.GetBestStoriesIds();
 		}
 
-		cache.SetBestStoriesIds(bestStories!);
+		_semaphore.Release();
 
 		return bestStories!;
 	}
 
 	public async Task<List<StoryModel>> GetBestStories(int num)
 	{
-		var bestStories = cache.GetBestStories(num);
-		if (bestStories.Count > 0)
+		var bestStories = new List<StoryModel>();
+
+		//Current stories from the API
+		var bestStoriesIds = await GetBestStoriesIds();
+
+		//Ids saved in cache
+		var cachedStoriesIds = cache.GetBestStoriesIds();
+
+		//Ids that was included
+		var includedIds = bestStoriesIds.Except(cachedStoriesIds).ToList();
+		//Ids that was removed
+		var removedIds = cachedStoriesIds.Except(bestStoriesIds).ToList();
+
+		bool hasChanges = false;
+
+		if ((includedIds != null && includedIds.Count > 0)
+			||(removedIds != null && removedIds.Count > 0))
 		{
-			return bestStories;
+			hasChanges = true;
+		}
+
+		if (!hasChanges)
+		{
+			bestStories = cache.GetBestStories(num);
+			if (bestStories.Count > 0)
+			{
+				return bestStories;
+			}
 		}
 
 		//Avoiding overload on calling hackernews endpoints
@@ -49,11 +72,19 @@ public class StoriesService (
 			return [];
 		}
 
-		var bestStoriesIds = await GetBestStoriesIds();
+		// Limit simultaneous requests
+		await _semaphore.WaitAsync();
 
 		cache.SetUpdating(true);
 
-		foreach (var id in bestStoriesIds)
+		//Remove old stories
+		foreach (var removed in removedIds!)
+		{
+			cache.RemoveStory(removed);
+			cachedStoriesIds.Remove(removed);
+		}
+
+		foreach (var id in includedIds!)
 		{
 			try
 			{
@@ -68,11 +99,16 @@ public class StoriesService (
 			}
 		}
 
+		cachedStoriesIds.AddRange(includedIds);
+		cache.SetBestStoriesIds(cachedStoriesIds);
+
 		cache.SetUpdating(false);
 
 		cache.CacheUpdated();
 
 		bestStories = cache.GetBestStories(num);
+
+		_semaphore.Release();
 
 		return bestStories;
 	}

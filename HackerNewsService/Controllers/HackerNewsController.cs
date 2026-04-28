@@ -19,7 +19,7 @@ namespace HackerNewsService.Controllers
             if (rank <= 0) rank = 3; //default rank is best 3
 
             //Setting the cache lifetime in seconds (default is 300 seconds or 5 minutes)
-            storiesService.SetCacheLifetime(30);
+            //storiesService.SetCacheLifetime(30);
 
 			var bestStories = await storiesService.GetBestStories(rank);
 
